@@ -1,9 +1,10 @@
 from CoinmarketcapData import DataParse
+import pandas as pd
 class Tests(DataParse):
     
-    def _init_(self) -> None:
+    def __init__(self) -> None:
         super().__init__()
-if _name_ == '_main_':
+if __name__ == '__main__':
     Tests().get_crypto_name('BTC')
     Tests().get_crypto_price('ETH')
     Tests().get_crypto_volume('BTC')
@@ -14,3 +15,16 @@ if _name_ == '_main_':
     Tests().crypto_change_over_time('BTC')
     Tests().get_crypto_circ_supply('BTC')
     Tests().crypto_info('BNB')
+
+
+if __name__ == '__main__':
+    data_parser = DataParse()
+
+    symbols = ['BTC', 'ETH', 'USDT']  
+    crypto_data = {}
+
+    for symbol in symbols:
+        crypto_data[symbol] = data_parser.crypto_info(symbol)
+
+    df = pd.DataFrame.from_dict(crypto_data, orient='index')
+    print(df)

@@ -1,5 +1,4 @@
 import requests
-import pandas as pd
 import os
 from dotenv import load_dotenv
 load_dotenv()
@@ -83,16 +82,3 @@ class DataParse:
             'circ_supply' : self.get_crypto_circ_supply(symbol)
         }
         return info 
-
-
-# #Testing and manipulating
-
-# symbols = ['BTC', 'ETH', 'USDT']  # List of cryptocurrency symbols
-# crypto_data = {}
-
-# for symbol in symbols:
-#     crypto_data[symbol] = crypto_info(symbol)
-
-# # Convert the collected data into a pandas DataFrame
-# df = pd.DataFrame.from_dict(crypto_data, orient='index')
-# print(df)
