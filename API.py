@@ -24,8 +24,8 @@ def get_request(endpoint):
         'CB-ACCESS-TIMESTAMP': timestamp
     }
 
-    response = requests.get(url, headers=headers)
-    return response.json()
+    response = requests.get(url, headers=headers).json()
+    return response
 
 # Get account information
 account_info = get_request('/accounts')
