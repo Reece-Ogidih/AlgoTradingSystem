@@ -86,15 +86,15 @@ get_crypto_price('BTC')
 get_crypto_volume('BTC')
 get_crypto_market_cap('BTC')
 crypto_change_hour('BTC')
-crypto_change_day('BTC')
+crypto_change_day('ETH')
 crypto_change_week('BTC')
 crypto_change_over_time('BTC')
 get_crypto_circ_supply('BTC')
-crypto_info('BTC')
+crypto_info('BNB')
 
 #Testing and manipulating
 
-symbols = ['BTC', 'ETH', 'LTC']  # List of cryptocurrency symbols
+symbols = ['BTC', 'ETH', 'USDT']  # List of cryptocurrency symbols
 crypto_data = {}
 
 for symbol in symbols:
@@ -103,8 +103,6 @@ for symbol in symbols:
 # Displaying the collected data
 for symbol, info in crypto_data.items():
     print(f"{symbol} info: {info}")
-
-
 
 # Convert the collected data into a pandas DataFrame for easier manipulation
 df = pd.DataFrame.from_dict(crypto_data, orient='index')
