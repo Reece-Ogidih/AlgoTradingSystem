@@ -4,11 +4,14 @@ import time
 import base64
 import hmac
 import hashlib
+import os
+from dotenv import load_dotenv
 
-API_KEY = 'ee9a7cdf-e311-44ec-a0de-e32e5997630c'
-API_SECRET = 'MHcCAQEEIM+ort7fAKVb/RjuwntndFLTrZVvNVSzB4wj1aZ9tZQqoAoGCCqGSM49\nAwEHoUQDQgAE9YJI2t5vlM5LDyBDQBJ0UtFLmKREvbgA26sSCBeC6bwh6dP3jvIO\nbFgN60VFb2MT+QRf6IZvVQx1DO7wLdsU7w=='
-#API_PASSPHRASE = 'your_passphrase'
-BASE_URL = 'https://api.pro.coinbase.com'
+
+
+API_KEY = os.getenv('COINBASE_API_KEY')
+API_SECRET = os.getenv('COINBASE_API_SECRET')
+BASE_URL = os.getenv('COINBASE_URL')
 
 def get_request(endpoint):
     url = BASE_URL + endpoint
