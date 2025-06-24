@@ -19,6 +19,11 @@ func main() {
 		return
 	}
 
+	// To validify everything works properly we use some outputs
+	// First we get a look at number of candles we have retrieved (would expect 525600 since there are that many minutes in a year)
+	fmt.Printf("Total number of Candles	fetched: %d\n", len(data.Candles))
+
+	// Then we take a snapshot by checking first 5 candles to ensure candle data looks correct
 	for i := 0; i < 5 && i < len(data.Candles); i++ {
 		fmt.Printf("%v\n", data.Candles[i])
 	}
