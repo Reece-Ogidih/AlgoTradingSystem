@@ -19,14 +19,14 @@ This project currently supports the **Solana (SOL)**/USDT pair for historical ba
 
 ## 📐 Planned Strategy Pipeline
 
-### 🔍 Rule-Based Trading Engine
+### Rule-Based Trading Engine
 
 - Trendline detection via sliding windows
 - Support/resistance level recognition
 - Drawdown and volatility-based trade logic
 - Break and retest pattern detection
 
-### 🤖 Machine Learning Integration
+### Machine Learning Integration
 
 - ML model trained on enriched historical dataset (OHLCV + indicators)
 - Outputs float confidence value in range [0.0, 1.0]
@@ -36,14 +36,14 @@ This project currently supports the **Solana (SOL)**/USDT pair for historical ba
 
 If the rule-based logic flags a trade, and the ML model returns `confidence = 0.65`, the position size might be reduced from `$5` to `$3.25`, scaling risk and conviction together.
 
-### 📊 Other Key Features (Planned)
+### Other Key Features (Planned)
 
 - Paper trading mode for safe backtesting
 - Modular design: Go for backend logic, Python for ML
 - Future live trading using connected crypto wallets (starting with Solana)
 - Long-term goal: Market Sentiment Analysis as well as expansion to support BTC, ETH, and other pairs
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -54,7 +54,7 @@ If the rule-based logic flags a trade, and the ML model returns `confidence = 0.
 
 _(Installation instructions will follow as live features are added.)_
 
-## 🛣️ Roadmap
+## Roadmap
 
 - [x] Historical data fetcher with proper sorting and rate-limiting
 - [x] Base `CandleStick` struct and dataset pipeline
