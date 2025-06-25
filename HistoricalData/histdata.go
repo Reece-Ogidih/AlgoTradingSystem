@@ -5,10 +5,10 @@ import (
 	"fmt"      // Standard formatting and printing library
 	"io"       // To read/write the files
 	"net/http" // To make Requests
-	"sort"
-	"strconv"
-	"sync"
-	"time" // To convert date into required format for CoinGecko's API
+	"sort"     // To sort the dataset time-wise
+	"strconv"  // To parse the json response
+	"sync"     // To ensure all workers finish
+	"time"     // To convert date into required format for Binance's API
 )
 
 // First I define type of candlestick which then has the data I pull from each candlestick through Binance API
@@ -22,6 +22,14 @@ type CandleStick struct {
 	Volume      float64
 	NumOfTrades int64
 	CloseTime   int64
+
+	// Will add the type in for the technical indicators which will be appended after theyre calculated from the raw data
+	EMA9       float64
+	EMA21      float64
+	StochRSI   float64
+	MACD       float64
+	MACDSignal float64
+	MACDHist   float64
 }
 
 type Dataset struct {
@@ -98,6 +106,7 @@ func worker(id int, jobChan <-chan Job, resultChan chan<- []CandleStick, wg *syn
 			volume, _ := strconv.ParseFloat(item[5].(string), 64)
 			closeTime := int64(item[6].(float64))
 			numTrades := int64(item[8].(float64))
+			// No need to worry about the technical indicators, Go will automatically fill them with 0vals
 
 			candles = append(candles, CandleStick{
 				OpenTime:    openTime,
