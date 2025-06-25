@@ -1,59 +1,74 @@
 # CT-Bot
 
-A crypto trading bot focused on short-term trades, designed to automate and optimize trading decisions using machine learning and market sentiment analysis.
+A crypto trading bot focused on short-term, trend-following strategies, combining rule-based trading techniques with machine learning to intelligently scale trade sizes based on confidence.
 
 ## Project Overview
 
-CT-Bot aims to execute trades on behalf of users by combining:
+**CT-Bot** is a hybrid crypto trading system designed to automate day trades using a mix of traditional technical analysis and machine learning. It leverages both deterministic trading signals (e.g., support/resistance, drawdowns, trendline breaks) and probabilistic model outputs to make position-weighted decisions.
 
-- **Machine Learning models** trained on historical and live paper trading data to identify profitable trade signals.
-- **Market sentiment analysis** integrating social media, news, and other data sources to refine trading decisions.
+This project currently supports the **Solana (SOL)**/USDT pair for historical backtesting, with plans to extend to live trading and more markets.
 
-The bot will initially support the **Solana** blockchain, with plans to expand to other cryptocurrencies like Bitcoin.
+## ✅ What’s Been Built So Far
 
-## Features (Planned)
+- Historical candlestick data fetcher for SOL/USDT using Binance API
+  - Efficient, rate-limited multi-worker downloader in Go
+  - Parses and sorts OHLCV candlestick data
+- Technical indicator module in progress
+  - EMA, StochRSI, MACD
+- Dataset preparation for training and rule-based logic integration
 
-- Connects securely to user wallets to execute trades automatically.
-- Utilizes real-time and historical market data for decision making.
-- Implements machine learning algorithms for trade signal prediction.
-- Incorporates sentiment analysis to account for market mood.
-- Supports paper trading for backtesting and training without risking real funds.
-- Modular architecture with backend services in Go and ML components in Python.
+## 📐 Planned Strategy Pipeline
 
-## Getting Started
+### 🔍 Rule-Based Trading Engine
+
+- Trendline detection via sliding windows
+- Support/resistance level recognition
+- Drawdown and volatility-based trade logic
+- Break and retest pattern detection
+
+### 🤖 Machine Learning Integration
+
+- ML model trained on enriched historical dataset (OHLCV + indicators)
+- Outputs float confidence value in range [0.0, 1.0]
+- Model does **not** directly decide trades — it **modulates** trade weight
+
+**Example:**
+
+If the rule-based logic flags a trade, and the ML model returns `confidence = 0.65`, the position size might be reduced from `$5` to `$3.25`, scaling risk and conviction together.
+
+### 📊 Other Key Features (Planned)
+
+- Paper trading mode for safe backtesting
+- Modular design: Go for backend logic, Python for ML
+- Future live trading using connected crypto wallets (starting with Solana)
+- Long-term goal: Market Sentiment Analysis as well as expansion to support BTC, ETH, and other pairs
+
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- Go 1.x installed
-- Python 3.x installed
-- Access to Solana API endpoints or node for blockchain interaction
-- API keys for exchange and sentiment data sources (TBD)
+- Go 1.21+
+- Python 3.9+
+- No paid APIs required for initial development
+- Binance public endpoint used for historical data
 
-### Installation
+_(Installation instructions will follow as live features are added.)_
 
-(To be added once the initial project structure and dependencies are defined.)
+## 🛣️ Roadmap
 
-## Usage
+- [x] Historical data fetcher with proper sorting and rate-limiting
+- [x] Base `CandleStick` struct and dataset pipeline
+- [ ] Compute and append technical indicators to candle struct
+- [ ] Train ML model to predict short-term trends
+- [ ] Confidence-weighted trading logic (hybrid ML + rules)
+- [ ] Drawdown and trendline-based rule logic
+- [ ] Paper trading simulator
+- [ ] Real-time price feed integration
+- [ ] Wallet connection and execution engine
+- [ ] Analysis of Market Sentiment (Twitter, Reddit etc)
+- [ ] Extend to other assets (BTC, ETH, etc.)
 
-(To be added as features are developed.)
-
-## Roadmap
-
-- [ ] Design and implement wallet integration for Solana.
-- [ ] Collect and preprocess historical market data.
-- [ ] Develop and train initial ML models for short-term trade prediction.
-- [ ] Build sentiment analysis module.
-- [ ] Integrate ML and sentiment modules into the trading bot engine.
-- [ ] Enable paper trading mode.
-- [ ] Develop user interface and controls.
-
-## Contributing
-
-Contributions and suggestions are welcome! Please open issues or submit pull requests.
-
-## License
+## 📄 License
 
 MIT License
-
----
 
