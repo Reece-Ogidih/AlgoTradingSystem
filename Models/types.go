@@ -1,6 +1,7 @@
 package models
 
 // This file is for storing all type declarations which are not local to a single file
+// For a different file to use one of these types it will need to preface it with models. (For example models.Candlestick)
 
 // First I define type of candlestick which then has the data I pull from each candlestick through Binance API
 // Then define the overall dataset to be a collection of these candlesticks
