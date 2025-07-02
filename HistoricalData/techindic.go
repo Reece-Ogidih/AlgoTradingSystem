@@ -2,6 +2,8 @@ package histdata
 
 import (
 	"math"
+
+	models "github.com/Reece-Ogidih/CT-Bot/Models"
 )
 
 // Looking into the mathematical forumulation, many technical indicator calculations depend on the previous x candles' technical indicators
@@ -9,7 +11,7 @@ import (
 // I decided against imputing as this will bring bias into the ML model, so will remove these entries after calculating starting averages
 
 // First start with the helper function for Exponential Moving Average
-func Calc_EMA(candles []CandleStick, period int) []float64 {
+func Calc_EMA(candles []models.CandleStick, period int) []float64 {
 	ema := make([]float64, len(candles))
 
 	// For debugging, will add an if statement to ensure there are enough candles to calculate ema over specified period

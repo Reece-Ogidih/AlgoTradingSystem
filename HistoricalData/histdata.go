@@ -9,32 +9,9 @@ import (
 	"strconv"  // To parse the json response
 	"sync"     // To ensure all workers finish
 	"time"     // To convert date into required format for Binance's API
+
+	models "github.com/Reece-Ogidih/CT-Bot/Models" // To use my declared types (for example Candlestick)
 )
-
-// First I define type of candlestick which then has the data I pull from each candlestick through Binance API
-// Then define the overall dataset to be a collection of these candlesticks
-type CandleStick struct {
-	OpenTime    int64
-	Open        float64
-	High        float64
-	Low         float64
-	Close       float64
-	Volume      float64
-	NumOfTrades int64
-	CloseTime   int64
-
-	// Will add the type in for the technical indicators which will be appended after theyre calculated from the raw data
-	EMA9       float64
-	EMA21      float64
-	StochRSI   float64
-	MACD       float64
-	MACDSignal float64
-	MACDHist   float64
-}
-
-type Dataset struct {
-	Candles []CandleStick
-}
 
 // Since Binance limits to 1000 candlesticks per call, will need to iteratively loop through sets of 1000 candlesticks
 // Instead of sequentially looping, I speed up the process by doing these calls concurrently using a worker pool.
@@ -68,7 +45,7 @@ func fetchData(url string) ([]byte, error) {
 }
 
 // So I first setup the workers which will read the data from Binance, Parse it and then append them
-func worker(id int, jobChan <-chan Job, resultChan chan<- []CandleStick, wg *sync.WaitGroup, interval string, maxCandlesPercall int64, rateLimiter <-chan time.Time) {
+func worker(id int, jobChan <-chan Job, resultChan chan<- []models.CandleStick, wg *sync.WaitGroup, interval string, maxCandlesPercall int64, rateLimiter <-chan time.Time) {
 	defer wg.Done()
 
 	for job := range jobChan {
@@ -96,7 +73,7 @@ func worker(id int, jobChan <-chan Job, resultChan chan<- []CandleStick, wg *syn
 		}
 
 		// For each candle, need to extract the values we want and then append them to the job's dataset:
-		var candles []CandleStick
+		var candles []models.CandleStick
 		for _, item := range rawData {
 			openTime := int64(item[0].(float64))
 			open, _ := strconv.ParseFloat(item[1].(string), 64)
@@ -108,7 +85,7 @@ func worker(id int, jobChan <-chan Job, resultChan chan<- []CandleStick, wg *syn
 			numTrades := int64(item[8].(float64))
 			// No need to worry about the technical indicators, Go will automatically fill them with 0vals
 
-			candles = append(candles, CandleStick{
+			candles = append(candles, models.CandleStick{
 				OpenTime:    openTime,
 				Open:        open,
 				High:        high,
@@ -126,7 +103,7 @@ func worker(id int, jobChan <-chan Job, resultChan chan<- []CandleStick, wg *syn
 
 // Now I create the overall system using the worker pool
 // I can not have smaller intervals than 1min so I just use that here, ideally would use 5s candles.
-func FetchCandles(start, end time.Time) (Dataset, error) {
+func FetchCandles(start, end time.Time) (models.Dataset, error) {
 	startMillis := start.UnixNano() / int64(time.Millisecond) //Converting into the required format for Binance API (so in milliseconds)
 	endMillis := end.UnixNano() / int64(time.Millisecond)     // int64(time.Milliseconds) gives number of nanoseconds in a millisecond
 
@@ -148,7 +125,7 @@ func FetchCandles(start, end time.Time) (Dataset, error) {
 	// Create the channels
 
 	jobChan := make(chan Job, numChunks)
-	resultChan := make(chan []CandleStick, numChunks)
+	resultChan := make(chan []models.CandleStick, numChunks)
 
 	rateLimit := 15 // To be safe, I chose a rate limit of 15 calls per sec
 	rateLimiterChan := time.Tick(time.Second / time.Duration(rateLimit))
@@ -178,7 +155,7 @@ func FetchCandles(start, end time.Time) (Dataset, error) {
 	close(resultChan)
 
 	// Now we can collect all the candles
-	var allCandles []CandleStick
+	var allCandles []models.CandleStick
 	for candles := range resultChan {
 		allCandles = append(allCandles, candles...)
 	}
@@ -188,5 +165,5 @@ func FetchCandles(start, end time.Time) (Dataset, error) {
 		return allCandles[i].OpenTime < allCandles[j].OpenTime
 	})
 
-	return Dataset{Candles: allCandles}, nil
+	return models.Dataset{Candles: allCandles}, nil
 }
