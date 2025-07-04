@@ -6,6 +6,15 @@ import (
 	models "github.com/Reece-Ogidih/CT-Bot/Models"
 )
 
+// First helper function I need is a function to sum a sice of numbers:
+func sum(data []float64) float64 {
+	total := 0.0
+	for _, v := range data {
+		total += v
+	}
+	return total
+}
+
 // Looking into the mathematical forumulation, many technical indicator calculations depend on the previous x candles' technical indicators
 // As a result, depending on the period, the first n candles of data can not have a value for these technical indicators
 // I decided against imputing as this will bring bias into the ML model, so will remove these entries after calculating starting averages
@@ -20,12 +29,12 @@ func Calc_EMA(candles []models.CandleStick, period int) []float64 {
 	}
 
 	// The first EMA is just a simple average
-	var sum float64
+	var closesum float64
 	for i := 0; i < period; i++ {
-		sum += candles[i].Close
+		closesum += candles[i].Close
 		ema[i] = math.NaN() // Will flag these first candles as NaN for now and remove after
 	}
-	sma := sum / float64(period)
+	sma := closesum / float64(period)
 	ema[period-1] = sma
 
 	alpha := 2.0 / float64(period)
@@ -39,6 +48,84 @@ func Calc_EMA(candles []models.CandleStick, period int) []float64 {
 
 }
 
-// Going to look into actually learning trading to a better level and also fully flesh out desired trading bot pipeline
-// Specifically, sliding windows and trendline channels as well as drawdown support will be some of the primary trading logic
-// ML algorithm will output weighted value between 0 and 1 which can be used by bot when deciding capital to invest into trade.
+// Will need to completely rework EMA helper function if I decide to use it
+
+// Now will need a helper functions to calculate ADX for both the historical dataset as well as for the live candle stream
+
+// Start with the calculator for the historical data
+// First make the base function that takes input of some candles and the period and calculates the ADX
+// Note that this is a lagging indicator and so the N-1 candles wont be able to have an ADX value, but loss of a few candles is negligible
+func CalculateADX(candles []models.CandleStick, period int) []float64 {
+	// Will define the types here
+	var posDM, negDM float64
+	var posDMs, negDMs []float64
+	var TRs []float64
+	var ADXs = make([]float64, len(candles)) // Final result
+
+	// Due to it being a lagging indicator the first N candles will be used to generate first ADX (where N is the period)
+	for i := 1; i < len(candles); i++ {
+		prev := candles[i-1]
+		curr := candles[i]
+		// First up we need to calculate +DI and -DI
+		UpMove := curr.High - prev.High
+		DownMove := prev.Low - curr.Low
+
+		if UpMove > DownMove && UpMove > 0 {
+			posDM = UpMove
+		} else {
+			posDM = 0
+		}
+		if DownMove > UpMove && DownMove > 0 {
+			negDM = DownMove
+		} else {
+			negDM = 0
+		}
+
+		// Next we calculate TR (True Range)
+		TR := math.Max(
+			curr.High-curr.Low,
+			math.Max( // Have to set it up like this since math.Max() only takes 2 arguments
+				math.Abs(curr.High-prev.Close),
+				math.Abs(curr.Low-prev.Close)),
+		)
+
+		// Store these values
+		TRs = append(TRs, TR)
+		posDMs = append(posDMs, posDM)
+		negDMs = append(negDMs, negDM)
+	}
+
+	// Now compute the first smoothed values (note I am titling them as prev since they are the base for the for loop later on)
+	prevTR := sum(TRs[0:period])
+	prevPosDM := sum(posDMs[0:period])
+	prevNegDM := sum(negDMs[0:period])
+
+	// Can use these these to calculate the first +DI, -DI, DX and ADX
+	prevplusDI := 100 * (prevPosDM / prevTR)
+	prevminusDI := 100 * (prevNegDM / prevTR)
+	prevDX := 100 * math.Abs(prevplusDI-prevminusDI) / (prevplusDI + prevminusDI)
+	ADXs[period] = prevDX
+
+	// Now can compute the ADX for remaining candles
+	for i := period + 1; i < len(candles); i++ {
+		// I think declarations for all the following variables go here
+		smoothedTR := (prevTR*float64(period-1) + TRs[i]) / float64(period)
+		smoothedPosDM := (prevPosDM*float64(period-1) + posDMs[i]) / float64(period)
+		smoothedNegDM := (prevNegDM*float64(period-1) + negDMs[i]) / float64(period)
+
+		plusDI := 100 * (smoothedPosDM / smoothedTR)
+		minusDI := 100 * (smoothedNegDM / smoothedTR)
+
+		DX := 100 * math.Abs(plusDI-minusDI) / (plusDI + minusDI)
+		ADXs[i] = (ADXs[i-1]*float64(period-1) + DX) / float64(period)
+
+		// Update the position
+		prevTR = smoothedTR
+		prevPosDM = smoothedPosDM
+		prevNegDM = smoothedNegDM
+	}
+	// Return the output
+	return ADXs
+}
+
+// Next step is to implement a way to do this for the live candle stream. Will define a struct in types.go and make a method to do this.
