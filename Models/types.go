@@ -14,6 +14,7 @@ type CandleStick struct {
 	Volume      float64
 	NumOfTrades int64
 	CloseTime   int64
+	IsFinal     bool
 
 	// Will need to add the type in for the technical indicators which will be appended after theyre calculated from the raw data
 	// For now leave out, may create a new type for this

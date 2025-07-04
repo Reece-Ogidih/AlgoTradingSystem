@@ -1,4 +1,4 @@
-package histdata
+package bot
 
 import (
 	"math"
@@ -128,4 +128,75 @@ func CalculateADX(candles []models.CandleStick, period int) []float64 {
 	return ADXs
 }
 
-// Next step is to implement a way to do this for the live candle stream. Will define a struct in types.go and make a method to do this.
+// To best calculate the ADX for live candle stream will use a method on a custom struct so will declare the struct here
+// Did it here rather than types.go since can not define a method on a non-local type
+type ADXCalculator struct {
+	Period    int
+	Count     int
+	PrevTR    float64
+	PrevPosDM float64
+	PrevNegDM float64
+	PrevADX   float64
+}
+
+// Now can calculate the ADX by implementing a method on the custom struct
+func (a *ADXCalculator) Update(prev, curr models.CandleStick) (adx float64, ok bool) {
+	UpMove := curr.High - prev.High
+	DownMove := prev.Low - curr.Low
+
+	var posDM, negDM float64
+	if UpMove > DownMove && UpMove > 0 {
+		posDM = UpMove
+	}
+	if DownMove > UpMove && DownMove > 0 {
+		negDM = DownMove
+	}
+
+	TR := math.Max(
+		curr.High-curr.Low,
+		math.Max( // Have to set it up like this since math.Max() only takes 2 arguments
+			math.Abs(curr.High-prev.Close),
+			math.Abs(curr.Low-prev.Close)),
+	)
+
+	a.Count++
+
+	if a.Count < a.Period {
+		// Not enough candles to calculate ADX
+		a.PrevTR += TR // Start getting the average
+		a.PrevPosDM += posDM
+		a.PrevNegDM += negDM
+		return 0, false
+	}
+
+	// Now the first time we get past this loop will be when Count = Period so we can throw in the special time calc in an if
+	if a.Count == a.Period {
+		if a.PrevTR == 0 { // Adding Guards for divide by 0
+			return 0, false
+		}
+		a.PrevTR /= float64(a.Period)
+		a.PrevPosDM /= float64(a.Period)
+		a.PrevNegDM /= float64(a.Period)
+	} else { // Calculations when its not the Nth candle  using Wilder's formula
+		a.PrevTR = (a.PrevTR*(float64(a.Period-1)) + TR) / float64(a.Period)
+		a.PrevPosDM = (a.PrevPosDM*(float64(a.Period-1)) + posDM) / float64(a.Period)
+		a.PrevNegDM = (a.PrevNegDM*(float64(a.Period-1)) + negDM) / float64(a.Period)
+	}
+
+	// Now calculate the directional index
+	plusDI := 100 * (a.PrevPosDM / a.PrevTR)
+	minusDI := 100 * (a.PrevNegDM / a.PrevTR)
+	denom := plusDI + minusDI // Adding guards for divide by 0
+	if denom == 0 {
+		return 0, false
+	}
+	DX := 100 * math.Abs(plusDI-minusDI) / denom
+
+	// Can now finally calculate the first as well as any following ADX values
+	if a.Count == a.Period {
+		a.PrevADX = DX
+	} else {
+		a.PrevADX = ((a.PrevADX * float64(a.Period-1)) + DX) / float64(a.Period)
+	}
+	return a.PrevADX, true
+}

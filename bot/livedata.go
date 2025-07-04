@@ -69,6 +69,7 @@ func FetchLive(ctx context.Context, symbol string, interval string) (<-chan mode
 				Volume:      volume,
 				CloseTime:   msg.Kline.CloseTime,
 				NumOfTrades: msg.Kline.NumOfTrades,
+				IsFinal:     msg.Kline.IsFinal,
 			}
 
 			// Send through the channel
