@@ -60,3 +60,13 @@ type BinanceKline struct {
 	TakerBuyQuote string `json:"Q"`
 	Ignore        string `json:"B"`
 }
+
+// Need the type for our trendlines
+type Trendline struct {
+	Gradient  float64 // Need the gradient and intercept for linear line: y = mx + c
+	Intercept float64
+	A1Time    int64 // Also need the Open time of the 2 anchor candles
+	A2Time    int64
+	A1Price   float64 // Also need the 2 anchor candles respective close price
+	A2Price   float64
+}
