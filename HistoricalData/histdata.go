@@ -94,6 +94,7 @@ func worker(id int, jobChan <-chan Job, resultChan chan<- []models.CandleStick, 
 				Volume:      volume,
 				CloseTime:   closeTime,
 				NumOfTrades: numTrades,
+				IsFinal:     true, // all historical candles are closed
 			})
 		}
 
@@ -166,4 +167,48 @@ func FetchCandles(start, end time.Time) (models.Dataset, error) {
 	})
 
 	return models.Dataset{Candles: allCandles}, nil
+}
+
+// Also need a simple function to get the most recent 50 candles
+// Could improve efficiency of this by using worker pool later on
+func RecentCandles(symbol, interval string, limit int) ([]models.CandleStick, error) {
+	endTime := time.Now().UnixMilli()
+	url := fmt.Sprintf("https://api.binance.com/api/v3/klines?symbol=%s&interval=%s&limit=%d&endTime=%d", symbol, interval, limit, endTime)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch candles: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var rawData [][]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&rawData); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	candles := make([]models.CandleStick, 0, len(rawData))
+	for _, item := range rawData {
+		openTime := int64(item[0].(float64))
+		open, _ := strconv.ParseFloat(item[1].(string), 64)
+		high, _ := strconv.ParseFloat(item[2].(string), 64)
+		low, _ := strconv.ParseFloat(item[3].(string), 64)
+		closePrice, _ := strconv.ParseFloat(item[4].(string), 64)
+		volume, _ := strconv.ParseFloat(item[5].(string), 64)
+		closeTime := int64(item[6].(float64))
+		numTrades := int64(item[8].(float64))
+
+		candles = append(candles, models.CandleStick{
+			OpenTime:    openTime,
+			Open:        open,
+			High:        high,
+			Low:         low,
+			Close:       closePrice,
+			Volume:      volume,
+			CloseTime:   closeTime,
+			NumOfTrades: numTrades,
+			IsFinal:     true,
+		})
+	}
+
+	return candles, nil
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 
-	models "github.com/Reece-Ogidih/CT-Bot/Models"
 	bot "github.com/Reece-Ogidih/CT-Bot/bot"
 )
 
@@ -21,27 +20,19 @@ func main() {
 	}
 
 	// Now can add in calculation of ADX
-	adxCalc := bot.ADXCalculator{Period: 14}
-	var prev models.CandleStick
+	adxCalc := bot.ADXCalculator{Period: 14, Count: 0}
 
-	count := 0
 	// Now loop so that for each new entry on channel it will print to terminal.
 	for candle := range candleStream {
+		// fmt.Printf("%+v\n", candle)  // This is just a checker for if the live candle stream works
 		if !candle.IsFinal { // Only want to be calculating once per candle
 			continue
 		}
 
-		if count == 0 { // First candle needs to be set as prev in order to use the Update method
-			prev = candle
-			count = 1
-			continue
-		}
-
 		// Now can calculate ADX
-		adx, ok := adxCalc.Update(prev, candle)
+		adx, ok := adxCalc.Update(candle)
 		if ok {
 			fmt.Printf("ADX:%.2f, %+v\n", adx, candle)
 		}
-		prev = candle
 	}
 }
