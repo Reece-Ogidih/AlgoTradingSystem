@@ -1,7 +1,6 @@
 package bot
 
 import (
-	"fmt"
 	"log"
 	"math"
 
@@ -161,7 +160,6 @@ func (a *ADXCalculator) Update(curr models.CandleStick) (adx float64, ok bool) {
 		if len(histCandles) <= a.Period { // Debugging check for if there are enough candles being retrieved.
 			log.Fatalf("not enough candles: expected at least %d, got %d", a.Period+1, len(histCandles))
 		}
-		fmt.Println(len(histCandles))
 		a.PrevCandle = histCandles[len(histCandles)-1]
 
 		_, a.PrevTR, a.PrevPosDM, a.PrevNegDM, a.PrevADX, err = CalculateADX(histCandles, a.Period) // Do not need list of ADX vals
@@ -207,46 +205,3 @@ func (a *ADXCalculator) Update(curr models.CandleStick) (adx float64, ok bool) {
 
 	return a.PrevADX, true
 }
-
-// a.Count++
-
-// if a.Count < a.Period {
-// 	// Not enough candles to calculate ADX
-// 	a.PrevTR += TR // Start getting the average
-// 	a.PrevPosDM += posDM
-// 	a.PrevNegDM += negDM
-// 	return 0, false
-// }
-
-// // Now the first time we get past this loop will be when Count = Period so we can throw in the special time calc in an if
-// if a.Count == a.Period {
-// 	if a.PrevTR == 0 { // Adding Guards for divide by 0
-// 		return 0, false
-// 	}
-// 	a.PrevTR /= float64(a.Period)
-// 	a.PrevPosDM /= float64(a.Period)
-// 	a.PrevNegDM /= float64(a.Period)
-// } else { // Calculations when its not the Nth candle  using Wilder's formula
-// a.PrevTR = (a.PrevTR*(float64(a.Period-1)) + TR) / float64(a.Period)
-// a.PrevPosDM = (a.PrevPosDM*(float64(a.Period-1)) + posDM) / float64(a.Period)
-// a.PrevNegDM = (a.PrevNegDM*(float64(a.Period-1)) + negDM) / float64(a.Period)
-// }
-
-// // Now calculate the directional index
-// plusDI := 100 * (a.PrevPosDM / a.PrevTR)
-// minusDI := 100 * (a.PrevNegDM / a.PrevTR)
-// denom := plusDI + minusDI // Adding guards for divide by 0
-// if denom == 0 {
-// 	return 0, false
-// }
-// DX := 100 * math.Abs(plusDI-minusDI) / denom
-
-// // Can now finally calculate the first as well as any following ADX values
-// if a.Count == a.Period {
-// 	a.PrevADX = DX
-// } else {
-// 	a.PrevADX = ((a.PrevADX * float64(a.Period-1)) + DX) / float64(a.Period)
-// }
-
-// return a.PrevADX, true
-// }
