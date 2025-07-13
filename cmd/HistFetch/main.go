@@ -20,6 +20,7 @@ func init() {
 	}
 }
 
+// Format the string used to connect to the database here
 func getDSN() string {
 	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s",
 		os.Getenv("DB_USER"),
