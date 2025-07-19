@@ -24,7 +24,7 @@ func main() {
 
 	// Now loop so that for each new entry on channel it will print to terminal.
 	for candle := range candleStream {
-		// fmt.Printf("%+v\n", candle) // This is just a checker for if the live candle stream works
+		//fmt.Printf("%+v\n", candle) // This is just a checker for if the live candle stream works
 		if !candle.IsFinal { // Only want to be calculating once per candle
 			continue
 		}
