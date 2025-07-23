@@ -13,8 +13,16 @@ This project currently supports the **Solana (SOL)**/USDT pair for historical ba
 - Historical candlestick data fetcher for SOL/USDT using Binance API
   - Efficient, rate-limited multi-worker downloader in Go
   - Parses and sorts OHLCV candlestick data
-- Technical indicator module in progress
-  - EMA, StochRSI, MACD
+- Live candlestick data obtained through a WebSocket connection (Binance)
+- Technical indicator module
+  - EMA, ADX
+- Connection to MySQL Database
+  - Contains tables to store both historical (training) and live candle data
+- Sliding Window
+  - Automated sliding window, initially propogated with most recent historical candles#
+- Trendlines module complete
+  - Creation of Support and Resistance trendlines over the sliding window
+  - Detection of breakouts from trendline
 - Dataset preparation for training and rule-based logic integration
 
 ## 📐 Planned Strategy Pipeline
@@ -28,7 +36,7 @@ This project currently supports the **Solana (SOL)**/USDT pair for historical ba
 
 ### Machine Learning Integration
 
-- ML model trained on enriched historical dataset (OHLCV + indicators)
+- ML model trained on enriched historical dataset as well as backtested results for original trading logic (OHLCV + indicators + historical trade signals)
 - Outputs float confidence value in range [0.0, 1.0]
 - Model does **not** directly decide trades — it **modulates** trade weight
 
@@ -58,8 +66,8 @@ _(Installation instructions will follow as live features are added.)_
 
 - [x] Historical data fetcher with proper sorting and rate-limiting
 - [x] Base `CandleStick` struct and dataset pipeline
-- [ ] Compute and append technical indicators to candle struct
-- [ ] Train ML model to predict short-term trends
+- [x] Compute and append technical indicators to candle struct
+- [ ] Train ML model
 - [ ] Confidence-weighted trading logic (hybrid ML + rules)
 - [ ] Drawdown and trendline-based rule logic
 - [ ] Paper trading simulator

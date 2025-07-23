@@ -61,6 +61,12 @@ type BinanceKline struct {
 	Ignore        string `json:"B"`
 }
 
+// Need the type which includes our standard candlestick data but also the ADX value
+type EnrichedCandle struct {
+	Candle CandleStick
+	ADX    float64
+}
+
 // Need the type for our trendlines
 type Trendline struct {
 	Gradient  float64 // Need the gradient and intercept for linear line: y = mx + c
