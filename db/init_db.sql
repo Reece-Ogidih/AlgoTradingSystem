@@ -4,7 +4,7 @@ USE ct_bot;
 
 DROP TABLE IF EXISTS candles_1m; -- A previous table I made which is unneccesary now
 
--- Historical 1m candles to train my ML model
+-- Historical 1m candles
 CREATE TABLE IF NOT EXISTS hist_candles_1m (
     id INT NOT NULL AUTO_INCREMENT,
     open_times_ms BIGINT,
@@ -42,3 +42,17 @@ CREATE TABLE IF NOT EXISTS bot_trades (
 );
 
 SHOW TABLES;
+
+-- To train ML model, will be good to add to the historical data both the ADX as well as a variable to depict when the bot would BUY or SELL
+CREATE TABLE IF NOT EXISTS train_ml (
+    id INT NOT NULL AUTO_INCREMENT,
+    open_times_ms BIGINT,
+    open DOUBLE,
+    close DOUBLE, 
+    high DOUBLE,
+    low DOUBLE,
+    volume DOUBLE,
+    adx BOOLEAN,
+    signal TINYINT, -- Will encode -1 for sell order, 0 for hold and 1 for buy order. Note these are catageroical not ordered.
+    PRIMARY KEY (id)
+);
