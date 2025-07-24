@@ -126,7 +126,7 @@ func CalculateADX(candles []models.CandleStick, period int) (
 		minusDI := 100 * (smoothedNegDM / smoothedTR)
 
 		DX := 100 * math.Abs(plusDI-minusDI) / (plusDI + minusDI)
-		ADXs[i+1] = (ADXs[i]*float64(period-1) + DX) / float64(period) // its ADXs[i+1] since we are calculating with respect to TRs[i]
+		ADXs[i] = (ADXs[i-1]*float64(period-1) + DX) / float64(period)
 
 		// Update the position
 		prevTR = smoothedTR

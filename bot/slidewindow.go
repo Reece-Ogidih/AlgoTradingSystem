@@ -14,6 +14,8 @@ type SlidingWindow struct {
 	Interval    string
 	Size        int
 	Candles     []models.CandleStick
+	SupLine     models.Trendline
+	ResLine     models.Trendline
 	Initialised bool
 }
 
@@ -37,6 +39,27 @@ func (sw *SlidingWindow) Init() error {
 
 // Next we define the method to update the sliding window live as new candles come in
 func (sw *SlidingWindow) NewWindow(candle models.CandleStick) {
+
+	sw.Candles = append(sw.Candles, candle)
+
+	// To keep the window at a fixed size, remove the oldest candle when a new one arrives
+	if len(sw.Candles) > sw.Size {
+		sw.Candles = sw.Candles[1:]
+	}
+}
+
+// Also add a version for the bot run to prepare for ML training
+type SlidingWindowTrain struct {
+	Symbol      string // Will add this for scalability later when expanding to multiple coins
+	Interval    string
+	Size        int
+	Candles     []models.EnrichedCandle
+	SupLine     models.Trendline
+	ResLine     models.Trendline
+	Initialised bool
+}
+
+func (sw *SlidingWindowTrain) NewWindowTrain(candle models.EnrichedCandle) {
 
 	sw.Candles = append(sw.Candles, candle)
 

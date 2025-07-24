@@ -116,20 +116,115 @@ func main() {
 	fullCandles := getADXCandles(candles)
 
 	// The next step here is to now create the sliding window and then create the detection for when to lodge BUY vs Sell orders
-	// For now will skip and directly insert the enriched candles into the DB to check indexing and any errors so far.
+	// Will immediately place the first 40 candles into the window
+	window := bot.SlidingWindowTrain{
+		Symbol:      "SOLUSDT",
+		Interval:    "1m",
+		Size:        40,
+		Candles:     fullCandles[:40],
+		SupLine:     models.Trendline{},
+		ResLine:     models.Trendline{},
+		Initialised: true,
+	}
+
+	// Now need to remove these first 40 candles from the remaining dataset
+	fullCandles = fullCandles[40:]
+
+	// Now will compute the support and resistance trendlines
+	window.ComputeTrendlines()
+
+	// The logic that will be implemented is that the bot will wait for a breakout or for certain number of candles to pass.
+	// In the case of breakout, ADX will be evaluated, if the trend strength is high enough it will trigger a "trade"
+	// No matter if a trade is triggered or not, once there is a breakout or n candles pass, New trendlines will be drawn.
+	// Will first set a counter for candles since the last update
+	candlesSinceUpdate := 0
+
+	// Will also add a line to note if bot is in a trade
+	inTrade := false
+	signal := 0
+
+	// To ensure the bot will recalibrate the trendlines after N candles I declare 2 variables
+	// One variable is the max number of candles when the bot is not in a trade before it recalibrates
+	// The other is specifically how long it can hold trades
+	idleRecalibrate := 60    // This would be redraw the trendlines once an hour
+	activeRecalibrate := 120 // This means the bot can hold a trade for at most 2 hours
+
+	// Finally, the slice of candle data for Ml dev needs to be declared
+	var finalData []models.DevData
+
+	// Now can begin the loop
+	for i := 0; i < len(fullCandles); i++ {
+		newCandle := fullCandles[i] // The "current" candle as it would be in live stream
+
+		// Now check for breakouts
+		brokeRes := window.CheckTrenlines2(window.ResLine, newCandle, true)
+		brokeSup := window.CheckTrenlines2(window.SupLine, newCandle, false)
+
+		// Now need to flag if there was a breakout
+		breakoutOccured := brokeRes || brokeSup // || is the "or" operator in Go, so this is saying either broke res line or broke sup line
+
+		// Can now do conditional actions based on breakouot detection
+		if breakoutOccured {
+			// Will start with thethreshold for ADX being 30, found 25 to be quite weak.
+			adx := newCandle.ADX
+			if adx >= 30.0 {
+				// This would mean that there is a strong trend, bot should attempt to trigger trade here
+				inTrade = true
+				if brokeRes {
+					signal = 1
+				} else if brokeSup {
+					signal = -1
+				}
+			}
+
+			// After a breakout, trendlines will be redrawn regardless of trend strength
+			candlesSinceUpdate = 0
+			window.NewWindowTrain(newCandle)
+			window.ComputeTrendlines()
+		} else {
+			// After checking for breakout, increase the counter and then check to see if there have been too many candles that have passed
+			candlesSinceUpdate++
+			window.NewWindowTrain(newCandle) // Update the sliding window
+
+			// Check for too long idle or holding a position
+			maxCandles := idleRecalibrate
+			if inTrade {
+				maxCandles = activeRecalibrate
+			}
+			if candlesSinceUpdate >= maxCandles {
+				// Exit any trades
+				inTrade = false
+				signal = 0
+
+				// Reset the counter and recalibrate the trendlines
+				candlesSinceUpdate = 0
+				window.ComputeTrendlines()
+			}
+		}
+		finalData = append(finalData, models.DevData{
+			OpenTime: newCandle.OpenTime,
+			Open:     newCandle.Open,
+			High:     newCandle.High,
+			Low:      newCandle.Low,
+			Close:    newCandle.Close,
+			Volume:   newCandle.Volume,
+			ADX:      newCandle.ADX,
+			Signal:   signal,
+		})
+	}
 
 	// Insert the data into the DB
 	stmt, err := db.Prepare(`
-	INSERT INTO train_ml (open_times_ms, open, close, high, low, volume, adx)
-	VALUES (?, ?, ?, ?, ?, ?, ?)
+	INSERT INTO train_ml (open_times_ms, open, close, high, low, volume, adx, trades)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		log.Fatal("Preparation error:", err)
 	}
 	defer stmt.Close()
 
-	for _, c := range fullCandles {
-		_, err := stmt.Exec(c.OpenTime, c.Open, c.Close, c.High, c.Low, c.Volume, c.ADX)
+	for _, c := range finalData {
+		_, err := stmt.Exec(c.OpenTime, c.Open, c.Close, c.High, c.Low, c.Volume, c.ADX, c.Signal)
 		if err != nil {
 			log.Println("Error inserting:", err)
 		}

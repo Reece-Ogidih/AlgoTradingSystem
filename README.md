@@ -71,7 +71,7 @@ _(Installation instructions will follow as live features are added.)_
 - [ ] Confidence-weighted trading logic (hybrid ML + rules)
 - [ ] Drawdown and trendline-based rule logic
 - [ ] Paper trading simulator
-- [ ] Real-time price feed integration
+- [x] Real-time price feed integration
 - [ ] Wallet connection and execution engine
 - [ ] Analysis of Market Sentiment (Twitter, Reddit etc)
 - [ ] Extend to other assets (BTC, ETH, etc.)
