@@ -40,20 +40,12 @@ func getDSN() string {
 }
 
 // Will need a helper function to get the data from the MySQL database
-func getCandles() ([]models.CandleStick, error) {
-	// Open the connection to the DB
-	db, err := sql.Open("mysql", getDSN())
-	if err != nil {
-		log.Fatal("DB connection error:", err)
-	}
-
-	// Will defer the close until end of function
-	defer db.Close()
-
+func getCandles(db *sql.DB) ([]models.CandleStick, error) {
+	// Since this function is getting run in main, will not need to reopen the db, but will instead pass it as an argument.
 	// Want each of the rows of the database sicne each row represents one candle
 	rows, err := db.Query("SELECT open_times_ms, open, close, high, low, volume FROM hist_candles_1m ORDER BY open_times_ms ASC")
 	if err != nil {
-		return nil, fmt.Errorf("Query Error: %w", err)
+		return nil, fmt.Errorf("query error: %w", err)
 	}
 
 	defer rows.Close()
@@ -65,7 +57,7 @@ func getCandles() ([]models.CandleStick, error) {
 	// Can now do a loop "rows.Next()" will return true if there is a next row
 	for rows.Next() {
 		if err := rows.Scan(&candle.OpenTime, &candle.Open, &candle.High, &candle.Low, &candle.Close, &candle.Volume); err != nil {
-			return nil, fmt.Errorf("Scan Error: %w", err)
+			return nil, fmt.Errorf("scan error: %w", err)
 		}
 
 		// If the scan works (meaning all the fields are filled) we can append this to candle set
@@ -74,7 +66,7 @@ func getCandles() ([]models.CandleStick, error) {
 
 	// Final Error check
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("Iteration error: %w", err)
+		return nil, fmt.Errorf("iteration error: %w", err)
 	}
 
 	return candles, nil
@@ -86,11 +78,20 @@ func getADXCandles(candles []models.CandleStick) (fullCandles []models.EnrichedC
 	ADXs, _, _, _, _, _ := bot.CalculateADX(candles, 14)
 	var enriched []models.EnrichedCandle
 
-	// Will first append them without adjusting for first 14 having no ADX value, then can check the output data to see exactly how they align
+	// Will first trim the slices to remove the first 14 candles (no ADX values)
+	candles = candles[14:]
+	ADXs = ADXs[14:]
+
+	// Can now combine the original candle data with the ADX values to get the enriched candle
 	for i := 0; i < len(candles); i++ {
 		enriched = append(enriched, models.EnrichedCandle{
-			Candle: candles[i],
-			ADX:    ADXs[i],
+			OpenTime: candles[i].OpenTime,
+			Open:     candles[i].Open,
+			High:     candles[i].High,
+			Low:      candles[i].Low,
+			Close:    candles[i].Close,
+			Volume:   candles[i].Volume,
+			ADX:      ADXs[i],
 		})
 	}
 
@@ -98,5 +99,42 @@ func getADXCandles(candles []models.CandleStick) (fullCandles []models.EnrichedC
 }
 
 func main() {
+	// Connect to the DB
+	db, err := sql.Open("mysql", getDSN())
+	if err != nil {
+		log.Fatal("DB connection error:", err)
+	}
+	defer db.Close()
 
+	// Get the candles
+	candles, err := getCandles(db)
+	if err != nil {
+		fmt.Println("Error:", err)
+	}
+
+	// Transform them into the form that holds the ADX as well
+	fullCandles := getADXCandles(candles)
+
+	// The next step here is to now create the sliding window and then create the detection for when to lodge BUY vs Sell orders
+	// For now will skip and directly insert the enriched candles into the DB to check indexing and any errors so far.
+
+	// Insert the data into the DB
+	stmt, err := db.Prepare(`
+	INSERT INTO train_ml (open_times_ms, open, close, high, low, volume, adx)
+	VALUES (?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		log.Fatal("Preparation error:", err)
+	}
+	defer stmt.Close()
+
+	for _, c := range fullCandles {
+		_, err := stmt.Exec(c.OpenTime, c.Open, c.Close, c.High, c.Low, c.Volume, c.ADX)
+		if err != nil {
+			log.Println("Error inserting:", err)
+		}
+	}
+
+	// Conclusive print (would expect 525600-14 since there are that many minutes in a year (first 13 have no adx))
+	fmt.Printf("Total number of Candles	inserted: %d\n", len(fullCandles))
 }

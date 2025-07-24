@@ -63,8 +63,13 @@ type BinanceKline struct {
 
 // Need the type which includes our standard candlestick data but also the ADX value
 type EnrichedCandle struct {
-	Candle CandleStick
-	ADX    float64
+	OpenTime int64
+	Open     float64
+	High     float64
+	Low      float64
+	Close    float64
+	Volume   float64
+	ADX      float64
 }
 
 // Need the type for our trendlines
