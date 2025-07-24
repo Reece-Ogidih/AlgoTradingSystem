@@ -72,6 +72,18 @@ type EnrichedCandle struct {
 	ADX      float64
 }
 
+// Need the type for the data which will be inserted to MySQL DB to develop the ML component
+type DevData struct {
+	OpenTime int64
+	Open     float64
+	High     float64
+	Low      float64
+	Close    float64
+	Volume   float64
+	ADX      float64
+	Signal   int
+}
+
 // Need the type for our trendlines
 type Trendline struct {
 	Gradient  float64 // Need the gradient and intercept for linear line: y = mx + c
