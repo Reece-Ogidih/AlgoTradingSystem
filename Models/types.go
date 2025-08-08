@@ -81,7 +81,8 @@ type DevData struct {
 	Close    float64
 	Volume   float64
 	ADX      float64
-	Signal   int
+	SigEntry int
+	SigExit  int
 }
 
 // Need the type for our trendlines
