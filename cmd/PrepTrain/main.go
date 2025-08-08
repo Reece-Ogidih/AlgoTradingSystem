@@ -139,9 +139,11 @@ func main() {
 	// Will first set a counter for candles since the last update
 	candlesSinceUpdate := 0
 
-	// Will also add a line to note if bot is in a trade
+	// Will also add some lines to note if bot is in a trade as well as entry and exit positions
 	inTrade := false
-	signal := 0
+	entrySignal := 0
+	exitSignal := 0
+	currentPos := 0
 
 	// To ensure the bot will recalibrate the trendlines after N candles I declare 2 variables
 	// One variable is the max number of candles when the bot is not in a trade before it recalibrates
@@ -156,6 +158,10 @@ func main() {
 	for i := 0; i < len(fullCandles); i++ {
 		newCandle := fullCandles[i] // The "current" candle as it would be in live stream
 
+		// Must reset entry and exit signals for each candle
+		entrySignal = 0
+		exitSignal = 0
+
 		// Now check for breakouts
 		brokeRes := window.CheckTrenlines2(window.ResLine, newCandle, true)
 		brokeSup := window.CheckTrenlines2(window.SupLine, newCandle, false)
@@ -169,11 +175,30 @@ func main() {
 			adx := newCandle.ADX
 			if adx >= 30.0 {
 				// This would mean that there is a strong trend, bot should attempt to trigger trade here
+				// Note that the currentPos = 0 check would not be in the actual trading bot as it limits trades to only occuring when not in any positions
 				inTrade = true
 				if brokeRes {
-					signal = 1
+					// Would enter into a long position here, so will update trackers accordingly
+					// Must check if this is a new entry or if we're also exiting here
+					if currentPos == 0 {
+						entrySignal = 1
+						currentPos = 1
+					} else if currentPos == -1 {
+						exitSignal = -1
+						entrySignal = 1
+						currentPos = 1
+					}
 				} else if brokeSup {
-					signal = -1
+					// Would enter into a short position
+					// Must check if this is a new entry or if we're also exiting here
+					if currentPos == 0 {
+						entrySignal = -1
+						currentPos = -1
+					} else if currentPos == 1 {
+						exitSignal = 1
+						entrySignal = -1
+						currentPos = -1
+					}
 				}
 			}
 
@@ -191,10 +216,15 @@ func main() {
 			if inTrade {
 				maxCandles = activeRecalibrate
 			}
-			if candlesSinceUpdate >= maxCandles {
+			if candlesSinceUpdate >= maxCandles && inTrade {
 				// Exit any trades
+				if currentPos == 1 {
+					exitSignal = 1
+				} else if currentPos == -1 {
+					exitSignal = -1
+				}
 				inTrade = false
-				signal = 0
+				currentPos = 0
 
 				// Reset the counter and recalibrate the trendlines
 				candlesSinceUpdate = 0
@@ -209,14 +239,15 @@ func main() {
 			Close:    newCandle.Close,
 			Volume:   newCandle.Volume,
 			ADX:      newCandle.ADX,
-			Signal:   signal,
+			SigEntry: entrySignal,
+			SigExit:  exitSignal,
 		})
 	}
 
 	// Insert the data into the DB
 	stmt, err := db.Prepare(`
-	INSERT INTO train_ml (open_times_ms, open, close, high, low, volume, adx, trades)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	INSERT INTO train_ml (open_times_ms, open, close, high, low, volume, adx, sig_entry, sig_exit)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		log.Fatal("Preparation error:", err)
@@ -224,12 +255,12 @@ func main() {
 	defer stmt.Close()
 
 	for _, c := range finalData {
-		_, err := stmt.Exec(c.OpenTime, c.Open, c.Close, c.High, c.Low, c.Volume, c.ADX, c.Signal)
+		_, err := stmt.Exec(c.OpenTime, c.Open, c.Close, c.High, c.Low, c.Volume, c.ADX, c.SigEntry, c.SigExit)
 		if err != nil {
 			log.Println("Error inserting:", err)
 		}
 	}
 
-	// Conclusive print (would expect 525600-14 since there are that many minutes in a year (first 13 have no adx))
+	// Conclusive print (would expect 525600-14 since there are that many minutes in a year (first 14 have no adx))
 	fmt.Printf("Total number of Candles	inserted: %d\n", len(fullCandles))
 }
