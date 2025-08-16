@@ -70,6 +70,8 @@ type EnrichedCandle struct {
 	Close    float64
 	Volume   float64
 	ADX      float64
+	PlusDI   float64
+	MinusDI  float64
 }
 
 // Need the type for the data which will be inserted to MySQL DB to develop the ML component
@@ -81,6 +83,7 @@ type DevData struct {
 	Close    float64
 	Volume   float64
 	ADX      float64
+	Idx      int
 	SigEntry int
 	SigExit  int
 }

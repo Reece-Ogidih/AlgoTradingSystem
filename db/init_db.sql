@@ -41,9 +41,9 @@ CREATE TABLE IF NOT EXISTS bot_trades (
     PRIMARY KEY (id)
 );
 
-SHOW TABLES;
+DROP TABLE train_ml;
 
--- To train ML model, will be good to add to the historical data both the ADX as well as a variable to depict when the bot would BUY or SELL
+-- To train ML model, will be good to add to the historical data both the ADX as well as variables to depict when the bot would enter and exit positions
 CREATE TABLE IF NOT EXISTS train_ml (
     id INT NOT NULL AUTO_INCREMENT,
     open_times_ms BIGINT,
@@ -52,7 +52,14 @@ CREATE TABLE IF NOT EXISTS train_ml (
     high DOUBLE,
     low DOUBLE,
     volume DOUBLE,
-    adx BOOLEAN,
-    signal TINYINT, -- Will encode -1 for sell order, 0 for hold and 1 for buy order. Note these are catageroical not ordered.
+    adx DOUBLE,
+    idx BIGINT,
+    sig_entry TINYINT, -- Will encode -1 for entry of short position, 1 for long and 0 for no action. Note these are catageroical not ordered.
+    sig_exit TINYINT, -- Will encode -1 for exit short position, 1 for long and 0 for hold.
     PRIMARY KEY (id)
 );
+
+TRUNCATE TABLE train_ml;
+
+
+SHOW TABLES;
