@@ -59,6 +59,8 @@ func Calc_EMA(candles []models.CandleStick, period int) []float64 {
 // Note that this is a lagging indicator and so the N-1 candles wont be able to have an ADX value, but loss of a few candles is negligible
 func CalculateADX(candles []models.CandleStick, period int) (
 	adxVals []float64,
+	plusDIvals []float64,
+	minusDIvals []float64,
 	prevTR float64,
 	prevPosDM float64, // Need all these additional outputs for the Live ADX calculator function below
 	prevNegDM float64,
@@ -69,7 +71,9 @@ func CalculateADX(candles []models.CandleStick, period int) (
 	var posDM, negDM float64
 	var posDMs, negDMs []float64
 	var TRs []float64
-	var ADXs = make([]float64, len(candles)) // Final result
+	var ADXs = make([]float64, len(candles))   // Final result
+	plusDIvals = make([]float64, len(candles)) // Need these for direction indication
+	minusDIvals = make([]float64, len(candles))
 
 	// Due to it being a lagging indicator the first N candles will be used to generate first ADX (where N is the period)
 	for i := 1; i < len(candles); i++ {
@@ -114,6 +118,8 @@ func CalculateADX(candles []models.CandleStick, period int) (
 	prevminusDI := 100 * (prevNegDM / prevTR)
 	prevDX := 100 * math.Abs(prevplusDI-prevminusDI) / (prevplusDI + prevminusDI)
 	ADXs[period] = prevDX
+	plusDIvals[period] = prevplusDI
+	minusDIvals[period] = prevminusDI
 
 	// Now can compute the ADX for remaining candles
 	for i := period + 1; i < len(TRs); i++ { // Have to use TRs here since it only has 49 entries
@@ -132,9 +138,13 @@ func CalculateADX(candles []models.CandleStick, period int) (
 		prevTR = smoothedTR
 		prevPosDM = smoothedPosDM
 		prevNegDM = smoothedNegDM
+
+		// Store the directional indicators
+		plusDIvals[i] = plusDI
+		minusDIvals[i] = minusDI
 	}
 	// Return the output (ADXs[len(ADXs) - 1] is the ADX value of most recent candle)
-	return ADXs, prevTR, prevPosDM, prevNegDM, ADXs[len(ADXs)-1], nil
+	return ADXs, plusDIvals, minusDIvals, prevTR, prevPosDM, prevNegDM, ADXs[len(ADXs)-1], nil
 }
 
 // To best calculate the ADX for live candle stream will use a method on a custom struct so will declare the struct here
@@ -162,7 +172,7 @@ func (a *ADXCalculator) Update(curr models.CandleStick) (adx float64, ok bool) {
 		}
 		a.PrevCandle = histCandles[len(histCandles)-1]
 
-		_, a.PrevTR, a.PrevPosDM, a.PrevNegDM, a.PrevADX, err = CalculateADX(histCandles, a.Period) // Do not need list of ADX vals
+		_, _, _, a.PrevTR, a.PrevPosDM, a.PrevNegDM, a.PrevADX, err = CalculateADX(histCandles, a.Period) // Do not need list of ADX vals
 		if err != nil {
 			log.Fatal(err)
 		}

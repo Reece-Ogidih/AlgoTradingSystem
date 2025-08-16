@@ -4,22 +4,22 @@ A crypto trading bot focused on short-term, trend-following strategies, combinin
 
 ## Project Overview
 
-**CT-Bot** is a hybrid crypto trading system designed to automate day trades using a mix of traditional technical analysis and machine learning. It leverages both deterministic trading signals (e.g., support/resistance, drawdowns, trendline breaks) and probabilistic model outputs to make position-weighted decisions.
+**CT-Bot** is a hybrid crypto trading system designed to automate day trades using a mix of traditional technical analysis and machine learning. It leverages both deterministic trading signals (e.g., support/resistance, ADX, trendline breaks) and probabilistic model outputs to make position-weighted decisions.
 
-This project currently supports the **Solana (SOL)**/USDT pair for historical backtesting, with plans to extend to live trading and more markets.
+This project currently supports the **Solana (SOL)**/USDT pair for, with plans to extend to more markets.
 
 ## ✅ What’s Been Built So Far
 
 - Historical candlestick data fetcher for SOL/USDT using Binance API
   - Efficient, rate-limited multi-worker downloader in Go
   - Parses and sorts OHLCV candlestick data
-- Live candlestick data obtained through a WebSocket connection (Binance)
+- Live candlestick data obtained through a WebSocket connection (Binance), currently being converted to direct Solana block-chain connection
 - Technical indicator module
   - EMA, ADX
 - Connection to MySQL Database
-  - Contains tables to store both historical (training) and live candle data
+  - Contains tables to store both historical candle data, live candle data, ML training data and table to log bot orders
 - Sliding Window
-  - Automated sliding window, initially propogated with most recent historical candles#
+  - Automated sliding window, initially propogated with most recent historical candles
 - Trendlines module complete
   - Creation of Support and Resistance trendlines over the sliding window
   - Detection of breakouts from trendline
@@ -59,6 +59,7 @@ If the rule-based logic flags a trade, and the ML model returns `confidence = 0.
 - Python 3.9+
 - No paid APIs required for initial development
 - Binance public endpoint used for historical data
+- Sol RPC public endpoint used for raw trade data
 
 _(Installation instructions will follow as live features are added.)_
 
@@ -67,7 +68,7 @@ _(Installation instructions will follow as live features are added.)_
 - [x] Historical data fetcher with proper sorting and rate-limiting
 - [x] Base `CandleStick` struct and dataset pipeline
 - [x] Compute and append technical indicators to candle struct
-- [ ] Train ML model
+- [x] Train ML model
 - [ ] Confidence-weighted trading logic (hybrid ML + rules)
 - [ ] Drawdown and trendline-based rule logic
 - [ ] Paper trading simulator

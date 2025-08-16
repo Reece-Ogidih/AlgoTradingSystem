@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	models "github.com/Reece-Ogidih/CT-Bot/Models"
 	bot "github.com/Reece-Ogidih/CT-Bot/bot"
@@ -43,7 +44,13 @@ func getDSN() string {
 func getCandles(db *sql.DB) ([]models.CandleStick, error) {
 	// Since this function is getting run in main, will not need to reopen the db, but will instead pass it as an argument.
 	// Want each of the rows of the database sicne each row represents one candle
-	rows, err := db.Query("SELECT open_times_ms, open, close, high, low, volume FROM hist_candles_1m ORDER BY open_times_ms ASC")
+	// main.go getCandles()
+	rows, err := db.Query(`
+	SELECT open_times_ms, open, high, low, close, volume
+	FROM hist_candles_1m
+	ORDER BY open_times_ms ASC
+	`)
+
 	if err != nil {
 		return nil, fmt.Errorf("query error: %w", err)
 	}
@@ -74,13 +81,19 @@ func getCandles(db *sql.DB) ([]models.CandleStick, error) {
 
 // The next Helper function we need is one that will calculate the ADX on all of these data points and then remove the first N candles (without ADX value)
 func getADXCandles(candles []models.CandleStick) (fullCandles []models.EnrichedCandle) {
-	// First we get the set of ADX values (am using standard period of 14 but may change this if too sensitive)
-	ADXs, _, _, _, _, _ := bot.CalculateADX(candles, 14)
+	// First we get the set of ADX values
+	size, err := strconv.Atoi(os.Getenv("ADX_PERIOD"))
+	if err != nil {
+		log.Fatalf("Error parsing ADX_PERIOD: %v", err)
+	}
+	ADXs, plusDIvals, minusDIvals, _, _, _, _, _ := bot.CalculateADX(candles, size)
 	var enriched []models.EnrichedCandle
 
-	// Will first trim the slices to remove the first 14 candles (no ADX values)
-	candles = candles[14:]
-	ADXs = ADXs[14:]
+	// Will first trim the slices to remove the first N candles (no ADX values)
+	candles = candles[size:]
+	ADXs = ADXs[size:]
+	plusDIvals = plusDIvals[size:]
+	minusDIvals = minusDIvals[size:]
 
 	// Can now combine the original candle data with the ADX values to get the enriched candle
 	for i := 0; i < len(candles); i++ {
@@ -92,6 +105,8 @@ func getADXCandles(candles []models.CandleStick) (fullCandles []models.EnrichedC
 			Close:    candles[i].Close,
 			Volume:   candles[i].Volume,
 			ADX:      ADXs[i],
+			PlusDI:   plusDIvals[i],
+			MinusDI:  minusDIvals[i],
 		})
 	}
 
@@ -99,6 +114,16 @@ func getADXCandles(candles []models.CandleStick) (fullCandles []models.EnrichedC
 }
 
 func main() {
+	// First pull some of the key info from .env
+	adx_threshold, err := strconv.Atoi(os.Getenv("ADX_THRESHOLD")) // This is the required ADX for a trade to be placed
+	if err != nil {
+		log.Fatalf("Error parsing ADX_THRESHOLD: %v", err) // Note: These can be converted from strings to integers and then to float64 since there is no decimals
+	}
+	adx_min, err := strconv.Atoi(os.Getenv("ADX_MIN")) // This is the required ADX for a position to be held
+	if err != nil {
+		log.Fatalf("Error parsing ADX_MIN: %v", err)
+	}
+
 	// Connect to the DB
 	db, err := sql.Open("mysql", getDSN())
 	if err != nil {
@@ -116,19 +141,29 @@ func main() {
 	fullCandles := getADXCandles(candles)
 
 	// The next step here is to now create the sliding window and then create the detection for when to lodge BUY vs Sell orders
-	// Will immediately place the first 40 candles into the window
+	// Will immediately place the first N candles into the window
+	size, err := strconv.Atoi(os.Getenv("WINDOW_SIZE")) // Grab the window size from .env
+	if err != nil {
+		log.Fatalf("Error parsing WINDOW_SIZE: %v", err)
+	}
 	window := bot.SlidingWindowTrain{
 		Symbol:      "SOLUSDT",
 		Interval:    "1m",
-		Size:        40,
-		Candles:     fullCandles[:40],
+		Size:        size,
+		Candles:     fullCandles[:size],
 		SupLine:     models.Trendline{},
 		ResLine:     models.Trendline{},
 		Initialised: true,
+		Idxs:        make([]int, size),
 	}
 
-	// Now need to remove these first 40 candles from the remaining dataset
-	fullCandles = fullCandles[40:]
+	// For loop to fill in the Indices
+	for i := range window.Idxs {
+		window.Idxs[i] = i
+	}
+
+	// Now need to remove these first N candles from the remaining dataset
+	fullCandles = fullCandles[size:]
 
 	// Now will compute the support and resistance trendlines
 	window.ComputeTrendlines()
@@ -140,64 +175,136 @@ func main() {
 	candlesSinceUpdate := 0
 
 	// Will also add some lines to note if bot is in a trade as well as entry and exit positions
-	inTrade := false
 	entrySignal := 0
 	exitSignal := 0
 	currentPos := 0
+	inTrade := currentPos != 0
+
+	// Need the next var for some debugging prints within the loop
+	countprint := 0
 
 	// To ensure the bot will recalibrate the trendlines after N candles I declare 2 variables
 	// One variable is the max number of candles when the bot is not in a trade before it recalibrates
 	// The other is specifically how long it can hold trades
-	idleRecalibrate := 60    // This would be redraw the trendlines once an hour
-	activeRecalibrate := 120 // This means the bot can hold a trade for at most 2 hours
-
+	idleRecalibrate, err := strconv.Atoi(os.Getenv("IDLE_LIMIT")) // This would be frequency of redrawing the trendlines when outside of trades
+	if err != nil {
+		log.Fatalf("Error parsing IDLE_LIMIT: %v", err)
+	}
+	activeRecalibrate, err := strconv.Atoi(os.Getenv("ACTIVE_LIMIT")) // This means the bot can hold a trade for at most this long
+	if err != nil {
+		log.Fatalf("Error parsing ACTIVE_LIMIT: %v", err)
+	}
 	// Finally, the slice of candle data for Ml dev needs to be declared
 	var finalData []models.DevData
 
 	// Now can begin the loop
 	for i := 0; i < len(fullCandles); i++ {
 		newCandle := fullCandles[i] // The "current" candle as it would be in live stream
+		nextIdx := window.GetNextIdx()
+		adx := newCandle.ADX
+		plusDI := newCandle.PlusDI
+		minusDI := newCandle.MinusDI
 
 		// Must reset entry and exit signals for each candle
 		entrySignal = 0
 		exitSignal = 0
 
-		// Now check for breakouts
-		brokeRes := window.CheckTrenlines2(window.ResLine, newCandle, true)
-		brokeSup := window.CheckTrenlines2(window.SupLine, newCandle, false)
+		// Now check for breakouts, will need to declare this variable
+		var breakoutOccured bool
+		var brokeSup bool
+		var brokeRes bool
 
 		// Now need to flag if there was a breakout
-		breakoutOccured := brokeRes || brokeSup // || is the "or" operator in Go, so this is saying either broke res line or broke sup line
+		// Must account for if we are in a trade
+		if currentPos == 1 {
+			brokeRes = false
+			brokeSup = window.CheckTrendlines2(window.SupLine, newCandle, false, currentPos, nextIdx)
+			breakoutOccured = brokeRes || brokeSup // || is the "or" operator in Go, so this is saying either broke res line or broke sup line
+		} else if currentPos == -1 {
+			brokeRes = window.CheckTrendlines2(window.ResLine, newCandle, true, currentPos, nextIdx)
+			brokeSup = false
+			breakoutOccured = brokeRes || brokeSup
+		} else {
+			brokeRes = window.CheckTrendlines2(window.ResLine, newCandle, true, currentPos, nextIdx)
+			brokeSup = window.CheckTrendlines2(window.SupLine, newCandle, false, currentPos, nextIdx)
+			breakoutOccured = brokeRes || brokeSup
+		}
+
+		// This is the debugging part added to print
+
+		supY := window.SupLine.Gradient*float64(nextIdx) + window.SupLine.Intercept
+		resY := window.ResLine.Gradient*float64(nextIdx) + window.ResLine.Intercept
+
+		if countprint <= 100 {
+			countprint++
+			fmt.Printf("Pos=%d x=%d SupGrad=%.5f SupInt=%.5f SupY=%.5f ResGrad=%.5f ResInt=%.5f ResY=%.5f High=%.5f Low=%.5f\n",
+				currentPos, nextIdx,
+				window.SupLine.Gradient, window.SupLine.Intercept, supY,
+				window.ResLine.Gradient, window.ResLine.Intercept, resY,
+				newCandle.High, newCandle.Low)
+		}
+
+		// Add a checker for if we are in a trade and the adx drops (so little momentum in market), the bot should exit its position (anticipating reversal)
+		if inTrade && adx < float64(adx_min) {
+			if currentPos == 1 {
+				exitSignal = 1
+				currentPos = 0
+				inTrade = false
+			} else if currentPos == -1 {
+				exitSignal = -1
+				currentPos = 0
+				inTrade = false
+			} else {
+				fmt.Println("Error, intrade and currentPos don't align, candle:", nextIdx)
+			}
+		}
 
 		// Can now do conditional actions based on breakouot detection
 		if breakoutOccured {
-			// Will start with thethreshold for ADX being 30, found 25 to be quite weak.
-			adx := newCandle.ADX
-			if adx >= 30.0 {
+			// First need to check to see if there was an ongoing trade as the bot would exit here
+			if brokeRes && currentPos == -1 {
+				exitSignal = -1 // Would exit here
+				currentPos = 0  // Reset our position to no trades
+				inTrade = false
+			}
+			if brokeSup && currentPos == 1 {
+				exitSignal = 1
+				currentPos = 0
+				inTrade = false
+			}
+
+			if adx >= float64(adx_threshold) {
 				// This would mean that there is a strong trend, bot should attempt to trigger trade here
 				// Note that the currentPos = 0 check would not be in the actual trading bot as it limits trades to only occuring when not in any positions
-				inTrade = true
-				if brokeRes {
+				if brokeRes && plusDI > minusDI {
 					// Would enter into a long position here, so will update trackers accordingly
-					// Must check if this is a new entry or if we're also exiting here
+					// Must check if this is a new entry or if theres an error
 					if currentPos == 0 {
 						entrySignal = 1
 						currentPos = 1
+						inTrade = true
 					} else if currentPos == -1 {
 						exitSignal = -1
 						entrySignal = 1
 						currentPos = 1
+						inTrade = true
+					} else {
+						fmt.Println("Error, proposing long whilst in long position:", newCandle)
 					}
-				} else if brokeSup {
+				} else if brokeSup && plusDI < minusDI {
 					// Would enter into a short position
-					// Must check if this is a new entry or if we're also exiting here
+					// Must check if this is a new entry or if theres an error
 					if currentPos == 0 {
 						entrySignal = -1
 						currentPos = -1
+						inTrade = true
 					} else if currentPos == 1 {
 						exitSignal = 1
 						entrySignal = -1
 						currentPos = -1
+						inTrade = true
+					} else {
+						fmt.Println("Error, proposing short whilst in short position", newCandle)
 					}
 				}
 			}
@@ -205,32 +312,34 @@ func main() {
 			// After a breakout, trendlines will be redrawn regardless of trend strength
 			candlesSinceUpdate = 0
 			window.NewWindowTrain(newCandle)
+			window.UpdateIdx(nextIdx)
 			window.ComputeTrendlines()
+
 		} else {
 			// After checking for breakout, increase the counter and then check to see if there have been too many candles that have passed
 			candlesSinceUpdate++
 			window.NewWindowTrain(newCandle) // Update the sliding window
+			window.UpdateIdx(nextIdx)
 
 			// Check for too long idle or holding a position
 			maxCandles := idleRecalibrate
 			if inTrade {
 				maxCandles = activeRecalibrate
 			}
-			if candlesSinceUpdate >= maxCandles && inTrade {
+			if candlesSinceUpdate >= maxCandles {
 				// Exit any trades
-				if currentPos == 1 {
-					exitSignal = 1
-				} else if currentPos == -1 {
-					exitSignal = -1
+				if currentPos != 0 {
+					exitSignal = currentPos
+					currentPos = 0
+					inTrade = false
 				}
-				inTrade = false
-				currentPos = 0
 
 				// Reset the counter and recalibrate the trendlines
 				candlesSinceUpdate = 0
 				window.ComputeTrendlines()
 			}
 		}
+
 		finalData = append(finalData, models.DevData{
 			OpenTime: newCandle.OpenTime,
 			Open:     newCandle.Open,
@@ -239,6 +348,7 @@ func main() {
 			Close:    newCandle.Close,
 			Volume:   newCandle.Volume,
 			ADX:      newCandle.ADX,
+			Idx:      nextIdx,
 			SigEntry: entrySignal,
 			SigExit:  exitSignal,
 		})
@@ -246,8 +356,8 @@ func main() {
 
 	// Insert the data into the DB
 	stmt, err := db.Prepare(`
-	INSERT INTO train_ml (open_times_ms, open, close, high, low, volume, adx, sig_entry, sig_exit)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	INSERT INTO train_ml (open_times_ms, open, close, high, low, volume, adx, idx, sig_entry, sig_exit)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		log.Fatal("Preparation error:", err)
@@ -255,7 +365,7 @@ func main() {
 	defer stmt.Close()
 
 	for _, c := range finalData {
-		_, err := stmt.Exec(c.OpenTime, c.Open, c.Close, c.High, c.Low, c.Volume, c.ADX, c.SigEntry, c.SigExit)
+		_, err := stmt.Exec(c.OpenTime, c.Open, c.Close, c.High, c.Low, c.Volume, c.ADX, c.Idx, c.SigEntry, c.SigExit)
 		if err != nil {
 			log.Println("Error inserting:", err)
 		}

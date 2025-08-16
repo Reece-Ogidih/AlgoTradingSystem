@@ -17,6 +17,7 @@ type SlidingWindow struct {
 	SupLine     models.Trendline
 	ResLine     models.Trendline
 	Initialised bool
+	// Will need to add the indices list that I am using in the simulation bot
 }
 
 func (sw *SlidingWindow) Init() error {
@@ -57,14 +58,28 @@ type SlidingWindowTrain struct {
 	SupLine     models.Trendline
 	ResLine     models.Trendline
 	Initialised bool
+	Idxs        []int // Will need to add an index to each candle in order for trendline slopes to not be near zero
 }
 
 func (sw *SlidingWindowTrain) NewWindowTrain(candle models.EnrichedCandle) {
-
 	sw.Candles = append(sw.Candles, candle)
 
 	// To keep the window at a fixed size, remove the oldest candle when a new one arrives
 	if len(sw.Candles) > sw.Size {
 		sw.Candles = sw.Candles[1:]
+	}
+}
+
+// Function to increase the index list when a new candle is considered. will separate this into two functions since I may want the index for next candle without updating window
+func (sw *SlidingWindowTrain) GetNextIdx() (nextIdx int) {
+	nextIdx = sw.Idxs[len(sw.Idxs)-1] + 1
+	return nextIdx
+}
+
+func (sw *SlidingWindowTrain) UpdateIdx(nextIdx int) {
+	sw.Idxs = append(sw.Idxs, nextIdx)
+
+	if len(sw.Idxs) > sw.Size {
+		sw.Idxs = sw.Idxs[1:]
 	}
 }
