@@ -1,20 +1,140 @@
+// Switched to using the DEX Screener API since it aggregates real-time on-chain swaps
+// across multiple Solana DEXs, giving more accurate price data than Binance, which can
+// diverge from actual on-chain liquidity conditions.
+
+// My original implementation with a Binance Websocket connection can be found at the bottom of this file
+
 package bot // Currently placing this within the overall trading bot file and package
 
 import (
-	"context" // This is to contrul runtime/cancellations since using Websocket instead of polling
+	"bytes"
+	"context" // This is to contrul runtime/cancellations since using Websocket instead of polling (Binance implementation)
 	"database/sql"
 	"encoding/json" // To unmashall
 	"fmt"           // Standard format lib
-	"log"           // For logging errors
+	"io"
+	"log"      // For logging errors
+	"net/http" // To make the HTTP Requests to DEX Screener
 	"os"
-	"strconv" // For when I need to convert the strings to different types
-	"strings" // For manipulation of strings (specifically make sure symbol is lower case)
+	"strconv" // For when I need to convert the strings to different types (Binance implementation)
+	"strings" // For manipulation of strings (specifically make sure symbol is lower case) (Binance implementation)
+	"time"
 
 	models "github.com/Reece-Ogidih/CT-Bot/Models"
-	"github.com/coder/websocket"       // Websocket library I decided to use (the ping/pong handling should be automatic)
+	"github.com/coder/websocket"       // Websocket library I decided to use (the ping/pong handling should be automatic) (Binance implementation)
 	_ "github.com/go-sql-driver/mysql" // Need to save the data to the MySQL DB
-	"github.com/joho/godotenv"         // Need to load secret info
+	"github.com/joho/godotenv"         // Need to load secret info (Binance implementation)
 )
+
+func FetchSOLUSDT() <-chan models.CandleStick {
+
+	// Make the channel
+	candleChan := make(chan models.CandleStick)
+
+	go func() {
+		// Will defer close the channel
+		defer close(candleChan)
+
+		// DEX Screener imposes a rate limit of 5 requests per sec
+		// To ensure to complpy with DEX Screener's rate limits, will use a time system to fire off the requests
+		ticker := time.NewTicker(210 * time.Millisecond) // I added a 10ms buffer to keep bot from hitting exact edge of rate limit
+		defer ticker.Stop()
+
+		// Will declare the url only for solana token for now, this function is easily adapted to make it token non-specific
+		solToken := "So11111111111111111111111111111111111111112"
+		url := fmt.Sprintf("https://api.dexscreener.com/latest/dex/tokens/%s", solToken)
+
+		// Need a variable to track if this is the first run
+		firstRun := true
+
+		// Need a variable to track the current candle
+		var currCandle *models.CandleStick
+
+		// Also now need to declare variables for calculations
+		var currVol, prevVol float64
+		var currBuy, prevBuy int64
+		var currSell, prevSell int64
+
+		// Will just set an infinite loop which starts a new loop in compoliance with our set rate
+		for range ticker.C {
+			// First, make the http request using DEX Screener API
+			resp, err := http.Get(url)
+			if err != nil {
+				log.Println("Fetch error,", err)
+				continue
+			}
+
+			defer resp.Body.Close()
+
+			body, _ := io.ReadAll(resp.Body)
+			log.Println(string(body))
+			resp.Body = io.NopCloser(bytes.NewBuffer(body))
+
+			var parsed models.DexResponse
+			if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+				log.Println("Parse error:,", err)
+				continue
+			}
+
+			// Since there is no need for multiple workers, dont need to worry about preserving chronological order
+			// Need to parse the info and extract the necessary information here
+			// Important to Note API return 5min averages
+			// Therefore will calculate delta values and use those
+			price, _ := parsed.PriceUSD.Float64()
+			currVol, _ = parsed.Volume.M5.Float64()
+			buys := parsed.Txns.M5.Buys // Already declared int64
+			sells := parsed.Txns.M5.Sells
+
+			currBuy = buys
+			currSell = sells
+
+			if firstRun {
+				prevVol = currVol
+				prevBuy = currBuy
+				prevSell = currSell
+				firstRun = false
+				continue // skip first candle
+			}
+
+			deltaVol := currVol - prevVol
+			deltaBuy := currBuy - prevBuy
+			deltaSell := currSell - prevSell
+			deltaTrades := int64(deltaBuy + deltaSell)
+
+			now := time.Now().Unix()
+
+			// Now check and start new candle if needed
+			if currCandle == nil || now >= currCandle.OpenTime+60 {
+				if currCandle != nil {
+					currCandle.IsFinal = true
+					candleChan <- *currCandle // Push finished candle
+				}
+				currCandle = &models.CandleStick{
+					OpenTime:    now - (now % 60), // start of this minute
+					Open:        price,
+					High:        price,
+					Low:         price,
+					Close:       price,
+					Volume:      deltaVol,
+					NumOfTrades: deltaTrades,
+				}
+			}
+
+			// To update current candle use Update method
+			// Is defined in methods.go
+			currCandle.Update(price, deltaVol, deltaTrades)
+
+			// At the end of each loop, will need to set the data
+			// This ensures that can continue calculating deltas
+			prevVol = currVol
+			prevBuy = currBuy
+			prevSell = currSell
+		}
+	}()
+	return candleChan
+}
+
+// BINANCE WEB-SOCKET IMPLEMENTATION
 
 // For the function's input and output declarations, I am passing a ctx var as input to allow the caller to timeout (ctx short for context)
 // The output is going to be a channel of candles which will be showing he candle data in real time

@@ -1,10 +1,10 @@
-# CT-Bot
+# Algorithmic ML Trading System
 
-A crypto trading bot focused on short-term, trend-following strategies, combining rule-based trading techniques with machine learning to intelligently scale trade sizes based on confidence.
+A crypto trading system focused on short-term, trend-following strategies, combining rule-based trading techniques with machine learning to intelligently scale trade sizes based on confidence.
 
 ## Project Overview
 
-**CT-Bot** is a hybrid crypto trading system designed to automate day trades using a mix of traditional technical analysis and machine learning. It leverages both deterministic trading signals (e.g., support/resistance, ADX, trendline breaks) and probabilistic model outputs to make position-weighted decisions.
+**Algorithmic ML Trading System** is a hybrid crypto trading system designed to automate day trades using a mix of traditional technical analysis and machine learning. It leverages both deterministic trading signals (e.g., support/resistance, ADX, trendline breaks) and probabilistic model outputs to make position-weighted decisions.
 
 This project currently supports the **Solana (SOL)**/USDT pair for, with plans to extend to more markets.
 
