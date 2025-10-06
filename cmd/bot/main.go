@@ -12,13 +12,16 @@ import (
 func main() {
 	// Create the context object
 	ctx := context.Background()
+	candleStream, err := bot.FetchSOLUSDT()
 
+	// Fallback method
 	// Get the channel (receive only) of live candle data
-	candleStream, err := bot.FetchLive(ctx, "SOLUSDT", "1m")
 	if err != nil {
-		log.Fatal(err)
+		candleStream, err = bot.FetchLive(ctx, "SOLUSDT", "1m")
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
-
 	// Now can add in calculation of ADX
 	adxCalc := bot.ADXCalculator{Period: 14, Count: 0}
 
