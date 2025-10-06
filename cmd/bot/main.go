@@ -1,9 +1,9 @@
 package main
 
 import (
-	//"context"
+	"context"
 	"fmt"
-	//"log"
+	"log"
 
 	bot "github.com/Reece-Ogidih/CT-Bot/bot"
 )
@@ -11,15 +11,17 @@ import (
 // For now I will be using this to test that the live data is being correctly obtained
 func main() {
 	// Create the context object
-	//ctx := context.Background()
+	ctx := context.Background()
+	candleStream, err := bot.FetchSOLUSDT()
 
+	// Fallback method
 	// Get the channel (receive only) of live candle data
-	//candleStream, err := bot.FetchLive(ctx, "SOLUSDT", "1m")
-	//if err != nil {
-	//log.Fatal(err)
-	//}
-	candleStream := bot.FetchSOLUSDT()
-
+	if err != nil {
+		candleStream, err = bot.FetchLive(ctx, "SOLUSDT", "1m")
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 	// Now can add in calculation of ADX
 	adxCalc := bot.ADXCalculator{Period: 14, Count: 0}
 

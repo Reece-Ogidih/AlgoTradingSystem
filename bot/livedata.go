@@ -7,14 +7,12 @@
 package bot // Currently placing this within the overall trading bot file and package
 
 import (
-	"bytes"
 	"context" // This is to contrul runtime/cancellations since using Websocket instead of polling (Binance implementation)
 	"database/sql"
 	"encoding/json" // To unmashall
 	"fmt"           // Standard format lib
-	"io"
-	"log"      // For logging errors
-	"net/http" // To make the HTTP Requests to DEX Screener
+	"log"           // For logging errors
+	"net/http"      // To make the HTTP Requests to DEX Screener
 	"os"
 	"strconv" // For when I need to convert the strings to different types (Binance implementation)
 	"strings" // For manipulation of strings (specifically make sure symbol is lower case) (Binance implementation)
@@ -26,7 +24,52 @@ import (
 	"github.com/joho/godotenv"         // Need to load secret info (Binance implementation)
 )
 
-func FetchSOLUSDT() <-chan models.CandleStick {
+// Will first define a helper function to help with pooling
+// Will use a weighted average to aggregate price and other metrics
+func AggregateDexData(
+	pairs []models.DexPair) (models.AggregateSnapshot, error) {
+	var totalWeighted float64 // Initially is 0.0
+	var totalLiquidity float64
+	var totalVol, totalBuys, totalSells float64
+
+	for _, p := range pairs {
+		price, err1 := p.PriceUSD.Float64()
+		liq, err2 := p.Liquidity.USD.Float64()
+		volM5, err3 := p.Volume.M5.Float64()
+
+		// Skip broken entries
+		// We still want to collect tx counts if possible
+		if err1 == nil && err2 == nil && liq > 0 {
+			totalWeighted += price * liq
+			totalLiquidity += liq
+		}
+
+		if err3 == nil {
+			totalVol += volM5
+		}
+		totalWeighted += price * liq
+		totalLiquidity += liq
+
+		totalVol += volM5
+		totalBuys += float64(p.Txns.M5.Buys)
+		totalSells += float64(p.Txns.M5.Sells)
+
+		// Want to add a guard agains div by 0
+		if totalLiquidity == 0 {
+			return models.AggregateSnapshot{},
+				fmt.Errorf("no valid liquidity")
+		}
+	}
+	price := totalWeighted / totalLiquidity
+	return models.AggregateSnapshot{
+		PriceUSD:   price,
+		VolumeM5:   totalVol,
+		TxnsBuyM5:  int64(totalBuys),
+		TxnsSellM5: int64(totalSells),
+	}, nil
+}
+
+func FetchSOLUSDT() (<-chan models.CandleStick, error) {
 
 	// Make the channel
 	candleChan := make(chan models.CandleStick)
@@ -44,16 +87,16 @@ func FetchSOLUSDT() <-chan models.CandleStick {
 		solToken := "So11111111111111111111111111111111111111112"
 		url := fmt.Sprintf("https://api.dexscreener.com/latest/dex/tokens/%s", solToken)
 
-		// Need a variable to track if this is the first run
-		firstRun := true
+		// Need a variable to track if this is the first run (Outdated)
+		//firstRun := true
 
 		// Need a variable to track the current candle
 		var currCandle *models.CandleStick
 
 		// Also now need to declare variables for calculations
-		var currVol, prevVol float64
-		var currBuy, prevBuy int64
-		var currSell, prevSell int64
+		var currVol float64
+		var currBuy int64
+		var currSell int64
 
 		// Will just set an infinite loop which starts a new loop in compoliance with our set rate
 		for range ticker.C {
@@ -66,9 +109,9 @@ func FetchSOLUSDT() <-chan models.CandleStick {
 
 			defer resp.Body.Close()
 
-			body, _ := io.ReadAll(resp.Body)
-			log.Println(string(body))
-			resp.Body = io.NopCloser(bytes.NewBuffer(body))
+			// body, _ := io.ReadAll(resp.Body)
+			// log.Println(string(body))
+			// resp.Body = io.NopCloser(bytes.NewBuffer(body))
 
 			var parsed models.DexResponse
 			if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
@@ -76,29 +119,47 @@ func FetchSOLUSDT() <-chan models.CandleStick {
 				continue
 			}
 
+			// Aggregate the pools here
+			snap, err := AggregateDexData(parsed.Pairs)
+			if err != nil {
+				log.Println("Aggregate Error:", err)
+				continue
+			}
 			// Since there is no need for multiple workers, dont need to worry about preserving chronological order
 			// Need to parse the info and extract the necessary information here
 			// Important to Note API return 5min averages
 			// Therefore will calculate delta values and use those
-			price, _ := parsed.PriceUSD.Float64()
-			currVol, _ = parsed.Volume.M5.Float64()
-			buys := parsed.Txns.M5.Buys // Already declared int64
-			sells := parsed.Txns.M5.Sells
+			// Changed to averaging to per min values
+			// This is due to the nature of the 5min averages returned
+			price := snap.PriceUSD
+			currVol = snap.VolumeM5
+			buys := snap.TxnsBuyM5 // Already declared int64
+			sells := snap.TxnsSellM5
 
 			currBuy = buys
 			currSell = sells
 
-			if firstRun {
-				prevVol = currVol
-				prevBuy = currBuy
-				prevSell = currSell
-				firstRun = false
-				continue // skip first candle
-			}
+			// This is some outdated logic kept for interest
+			// Was used with delta approach
+			// if firstRun {
+			// 	prevVol = currVol
+			// 	prevBuy = currBuy
+			// 	prevSell = currSell
+			// 	firstRun = false
+			// 	continue // skip first candle
+			// }
 
-			deltaVol := currVol - prevVol
-			deltaBuy := currBuy - prevBuy
-			deltaSell := currSell - prevSell
+			// deltaVol := currVol - prevVol
+			// deltaBuy := currBuy - prevBuy
+			// deltaSell := currSell - prevSell
+			// deltaTrades := int64(deltaBuy + deltaSell)
+
+			// DEX Screener reports rolling 5-minute metrics
+			// Normalize to per-minute values for stable candles
+			deltaVol := currVol / 5
+			deltaBuy := currBuy / 5
+			deltaSell := currSell / 5
+
 			deltaTrades := int64(deltaBuy + deltaSell)
 
 			now := time.Now().Unix()
@@ -124,14 +185,15 @@ func FetchSOLUSDT() <-chan models.CandleStick {
 			// Is defined in methods.go
 			currCandle.Update(price, deltaVol, deltaTrades)
 
+			// The following is outdated logic kept for interest
 			// At the end of each loop, will need to set the data
 			// This ensures that can continue calculating deltas
-			prevVol = currVol
-			prevBuy = currBuy
-			prevSell = currSell
+			// prevVol = currVol
+			// prevBuy = currBuy
+			// prevSell = currSell
 		}
 	}()
-	return candleChan
+	return candleChan, nil
 }
 
 // BINANCE WEB-SOCKET IMPLEMENTATION
